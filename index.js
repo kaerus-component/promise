@@ -1,3 +1,6 @@
+
+try { window } catch (e) { window = global }
+
 /* setImmediate shim */
 var setImmediate = window.setImmediate;
 

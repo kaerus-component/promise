@@ -1,0 +1,32 @@
+{
+  "name": "promise",
+  "version": "0.2.0",
+  "description": "A+ compliant promises",
+  "keywords": [
+    "promise",
+    "component"
+  ],
+  "author": { 
+    "name": "Kaerus",
+    "email": "contact@kaerus.com",
+    "web": "http://kaerus.com"
+  },
+  "contributors": [
+    "anders elo <anders@kaerus.com>"
+  ],
+  "devDependencies": {
+    "promises-aplus-tests":">=1.0.0"
+  },
+  "bugs": {
+    "url": "https://github.com/kaerus-component/promise/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/kaerus-component/promise"
+  },
+  "scripts": {
+    "test":"make test"
+  },
+  "main": "promise.js",
+  "license": "APACHE2_0"
+}
