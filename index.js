@@ -39,14 +39,16 @@ Promise.prototype.resolve = function() {
 
         if(typeof then[this._state] === 'function') {
             try {
+                /* Call handler with this Promise */
                 value = then[this._state].call(this,this.resolved);    
             } catch(e) {
+                /* reject if handler throws */
                 promise.reject(e); 
 
                 continue;   
             }    
-
             if(value instanceof Promise || (value && typeof value.then === 'function') )  {
+            
                 value.then(function(v){
                     promise.fulfill(v); 
                 }, function(r){
@@ -55,13 +57,14 @@ Promise.prototype.resolve = function() {
 
                 continue;
             } else {
+                /* A+ spec section 7.1 */  
                 state = FULFILLED;
             }  
-        }
+        } 
         promise._state = state;
         promise.resolved = value;
-        if(promise._calls) promise.resolve();
-    }
+        if(promise._calls) promise.resolve();   
+    }  
 } 
 
 Promise.prototype.then = function(onFulfill,onReject) {
@@ -103,7 +106,7 @@ Promise.prototype.fulfill = function(value) {
     this._state = FULFILLED;
     this.resolved = value;
 
-    if(this._timer) this.timeout(null);
+    if(this._timer) clearTimeout(this._timer);
     if(this._calls) this.resolve();
 
     return this;
@@ -115,12 +118,16 @@ Promise.prototype.reject = function(reason) {
     this._state = REJECTED;
     this.resolved = reason;
 
-    if(this._timer) this.timeout(null);
+    if(this._timer) clearTimeout(this._timer);
     if(this._calls) this.resolve();   
 
     return this;        
 }
 
+/* Allows us to defer & join tasks.            */
+/* var tasks = [func1,func2,func3];            */
+/* Promise.when(tasks)                         */
+/*    .spread(function(ret1,ret2,ret3){...});  */   
 Promise.prototype.when = function(task) {
     var promise, last = promise = this, values = [];
 
@@ -170,13 +177,16 @@ Promise.prototype.when = function(task) {
     return promise.then(function(){return values});
 } 
 
-Promise.prototype.attach = function(obj) {
-    this.attached = obj;
+Promise.prototype.attach = function(handle) {
+    /* Attaches a handle (typically) to the promiser.   */
+    /* In an Ajax scenario this could be the xhr object */ 
+    this.attached = handle;
 
     return this;
 }
 
 Promise.prototype.abort = function(message) {
+    /* notifies the attached process */
     if(this.attached && typeof this.attached.abort === 'function') 
         this.attached.abort();
 
@@ -186,20 +196,21 @@ Promise.prototype.abort = function(message) {
 }
 
 Promise.prototype.timeout = function(time,func) {
+    /* null cancels timeout */
     if(time === null) {
         clearTimeout(this._timer);
         return this;
     } 
     
+    /* fulfilled or rejected */
     if(this._state) return this;
 
-    var self = this;
-
+    /* trigger abort on timeout */
     if(!func) func = function() {
-        self.abort("timed out");
+        this.abort("timed out");
     }
     
-    this._timer = setTimeout(func,time);   
+    this._timer = setTimeout(func.bind(this),time);   
 
     return this;
 }
