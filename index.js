@@ -124,6 +124,39 @@ Promise.prototype.reject = function(reason) {
     return this;        
 }
 
+
+/* Helper for deferring a function/process */
+function defer(promise,proc) {
+    var value;
+
+    if(proc instanceof Promise || (proc && typeof proc.then === 'function')){
+        /* If proc is a promise, then wait for fulfillment */
+        proc.then(function(value) {
+            promise.fulfill(value);
+        }, function(reason) {
+            promise.reject(reason);
+        });
+    } else {
+        setImmediate(function(){
+            try {
+                value = proc.call(promise);
+                /* proc can resolve the promise itself */
+                /* in which case fullfill gets ignored */
+                promise.fulfill(value);
+            } catch (e) {
+                promise.reject(e);
+            }
+        });
+    }    
+    
+    return promise;    
+}
+
+/* defers and resolves a function/process */
+Promise.prototype.defer = function(proc){
+    return defer(this,proc);
+}
+
 /* Allows us to defer & join tasks.            */
 /* var tasks = [func1,func2,func3];            */
 /* Promise.when(tasks)                         */
@@ -133,33 +166,7 @@ Promise.prototype.when = function(task) {
 
     /* Single task */
     if(!Array.isArray(task)) 
-        return defer(this,task);
-    
-    /* Helper for deferring a function/process */
-    function defer(promise,proc) {
-        var value;
-        if(proc instanceof Promise || (proc && typeof proc.then === 'function')){
-            /* If proc is a promise, then wait for fulfillment */
-            proc.then(function(value) {
-                promise.fulfill(value);
-            }, function(reason) {
-                promise.reject(reason);
-            });
-        } else {
-            setImmediate(function(){
-                try {
-                    value = proc.call(promise);
-                    /* proc can resolve the promise itself */
-                    /* in which case fullfill gets ignored */
-                    promise.fulfill(value);
-                } catch (e) {
-                    promise.reject(e);
-                }
-            });
-        }    
-        
-        return promise;    
-    }
+        return this.defer(task);
 
     function deferred(promised,i) {
         defer(promised,task[i]).then(function(v) {
@@ -177,16 +184,16 @@ Promise.prototype.when = function(task) {
     return promise.then(function(){return values});
 } 
 
+/* Attaches a handle (typically) to the promiser.   */
+/* In an Ajax scenario this could be the xhr object */ 
 Promise.prototype.attach = function(handle) {
-    /* Attaches a handle (typically) to the promiser.   */
-    /* In an Ajax scenario this could be the xhr object */ 
     this.attached = handle;
 
     return this;
 }
 
+/* Aborts and notifies attached process (originator) */
 Promise.prototype.abort = function(message) {
-    /* notifies the attached process */
     if(this.attached && typeof this.attached.abort === 'function') 
         this.attached.abort();
 

@@ -16,7 +16,7 @@ Main features
 * Supports CommonJS and AMD loaders, or exports a global Promise(). 
 * Flexible fulfillments that allows multiple fulfillment values catched with then(value) or spread(arguments).
 * Easy to create promised wrappers by using when(task) to bundle functions/processes into a promise. 
-* Additional control through attached(), timout() & abort() methods.
+* Additional control through defer(), attached(), timout() & abort() methods.
 
 Install
 =======
