@@ -42,9 +42,9 @@ Promise.prototype.resolve = function() {
                 /* Call handler with this Promise */
                 value = then[this._state].call(this,this.resolved);    
             } catch(e) {
+                if(console && console.error) console.error(e);
                 /* reject if handler throws */
                 promise.reject(e); 
-
                 continue;   
             }    
             if(value instanceof Promise || (value && typeof value.then === 'function') )  {
