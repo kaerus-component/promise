@@ -3,5 +3,6 @@
   "version": "0.2.2",
   "repo": "kaerus-component/promise",
   "description": "A+/Promises",
-  "scripts": ["index.js"]
+  "scripts": ["index.js"],
+  "license": "Apache2_0"
 }
