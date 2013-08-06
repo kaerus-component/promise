@@ -1,6 +1,6 @@
 {
   "name": "promise",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "A+ compliant promises",
   "keywords": [
     "promise",
@@ -15,6 +15,8 @@
     "anders elo <anders@kaerus.com>"
   ],
   "devDependencies": {
+    "mocha":"*",
+    "should":"*",
     "promises-aplus-tests":">=1.0.0"
   },
   "bugs": {

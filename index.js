@@ -1,129 +1,171 @@
 
-try { window } catch (e) { window = global }
+/* 
+* Copyright (c) 2012 Kaerus (kaerus.com), Anders Elo <anders @ kaerus com>.
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*/
 
-/* setImmediate shim */
-var setImmediate = window.setImmediate;
+"use strict"
 
-if(typeof setImmediate !== 'function') {
-    if(typeof window.MessageChannel !== "undefined") {
-        var fifo = [], channel = new window.MessageChannel();
+var root;
+
+try{root = global} catch(e){try {root = window} catch(e){root = this}};
+
+var setImmediate = root.setImmediate;
+
+if(!setImmediate){
+    if(root.process && typeof root.process.nextTick === 'function') {
+        setImmediate = root.process.nextTick;
+    } else if (root.MessageChannel && typeof root.MessageChannel === "function") {
+        var fifo = [], channel = new root.MessageChannel();
         channel.port1.onmessage = function () { fifo.shift()() };
-        setImmediate = function (task) { fifo[fifo.length] = task; channel.port2.postMessage(); };
-    } else if(typeof window.setTimeout === 'function') {
-        setImmediate = window.setTimeout;
-    } else throw "No candidate for setImmediate";   
-}
+        setImmediate = function (task){ fifo[fifo.length] = task; channel.port2.postMessage(); };
+    } else if(root.setTimeout) {
+        setImmediate = root.setTimeout;
+    } else throw Error("No candidate for setImmediate");  
+} 
 
-var PENDING = 0, FULFILLED = 1, REJECTED = 2;
+var PROMISE = 0, FULFILLED = 1, REJECTED = 2;
 
-function Promise(obj) {
-    /* mixin */
-    if(obj){
-        for(var key in Promise.prototype)
-            obj[key] = Promise.prototype[key];
-        
-        return obj;
-    }
+function Promise(resolver) {
 
     if(!(this instanceof Promise))
-        return new Promise;
+        return new Promise(resolver);
+
+    Object.defineProperty(this,'calls',{
+        enumerable: false,
+        writable: false,
+        value: []
+    });
+
+    if(resolver){
+        var resolve = Resolver.bind(this);
+
+        if(typeof resolver !== 'function') 
+            throw TypeError("Promise resolver must be a function");
+
+        try {
+            var value = resolver(resolve);
+            if(value !== undefined) resolve.fulfill(value);
+        } catch (error) {
+            if(error instanceof Error)
+                console.log("Resolver error:", error.stack||error);
+
+            /* catched rejection */ 
+            resolve.reject(error);
+        }    
+
+    }    
 }
 
-Promise.prototype.resolve = function() {
-    var then, promise,
-        state = this._state,
-        value = this.resolved;   
-            
-    while(then = this._calls.shift()) {
-        promise = then[PENDING];
+Resolver.call(Promise.prototype);
 
-        if(typeof then[this._state] === 'function') {
-            try {
-                /* Call handler with this Promise */
-                value = then[this._state].call(this,this.resolved);    
-            } catch(e) {
-                if(console && console.error) console.error(e);
-                /* reject if handler throws */
-                promise.reject(e); 
-                continue;   
-            }    
-            if(value instanceof Promise || (value && typeof value.then === 'function') )  {
-            
-                value.then(function(v){
-                    promise.fulfill(v); 
-                }, function(r){
-                    promise.reject(r);
-                });
+function Resolver(){
+    var promised = this;
 
-                continue;
-            } else {
-                /* A+ spec section 7.1 */  
-                state = FULFILLED;
-            }  
-        } 
-        promise._state = state;
-        promise.resolved = value;
-        if(promise._calls) promise.resolve();   
-    }  
-} 
+    this.resolve = function() {
+        var then, promise, res,
+            state = this.state,
+            value = this.value;
+
+        if(!state) return;
+
+        while(then = this.calls.shift()) {
+            promise = then[PROMISE];
+
+            if((res = then[state]) != null) {
+                if(typeof res === 'function') {
+                    try {
+                        value = res.call(promise,this.value);  
+                    } catch(error) {
+                        if(promise.catch) promise.catch(error,this.value);
+                        else promise.reject(error); 
+
+                        continue;   
+                    }  
+
+                    if(value instanceof Promise || (value && typeof value.then === 'function') )  {
+                        /* assume value is thenable */
+                        value.then(function(v){
+                            promise.fulfill(v); 
+                        }, function(r){
+                            promise.reject(r);
+                        });
+
+                        continue;
+                    } else {
+                        state = FULFILLED;
+                    }  
+                } 
+            } 
+
+            promise.state = state;
+            promise.value = value;
+            promise.resolve();
+        }
+    }
+
+    this.fulfill = function(value) {
+        if(this.state) return;
+ 
+        if(arguments.length > 1)
+            value = [].slice.call(arguments);
+
+        this.state = FULFILLED;
+        this.value = value;
+
+        this.resolve();
+    }
+
+    this.reject = function(reason) {
+        if(this.state) return;
+
+        this.state = REJECTED;
+        this.value = reason;
+
+        this.resolve();
+    }
+
+    if(arguments.length) {
+        this.fulfill.apply(this,arguments);
+    }   
+}       
 
 Promise.prototype.then = function(onFulfill,onReject) {
     var self = this, promise = new Promise();
 
-    if(!this._calls) this._calls = [];   
+    this.calls[this.calls.length] = [promise, onFulfill, onReject];
 
-    this._calls[this._calls.length] = [promise, onFulfill, onReject];
-
-    if(this.resolved) {
+    if(this.state) {
         setImmediate(function(){
             self.resolve();
         });
-    }  
+    }    
 
     return promise;
 }
 
 Promise.prototype.spread = function(onFulfill,onReject) {
-    var self = this;
 
     function spreadFulfill(value) {
         if(!Array.isArray(value)) 
             value = [value];
 
-        return onFulfill.apply(self,value);
+        return onFulfill.apply(null,value);
     }   
 
     return this.then(spreadFulfill,onReject);
 }
-
-Promise.prototype.fulfill = function(value) {
-    if(this._state) return;
-    /* Constructs an array of fulfillment values */
-    /* if more than one argument was provided... */
-    if(arguments.length > 1) 
-        value = [].slice.call(arguments);
-
-    this._state = FULFILLED;
-    this.resolved = value;
-
-    if(this._timer) clearTimeout(this._timer);
-    if(this._calls) this.resolve();
-
-    return this;
-}
-
-Promise.prototype.reject = function(reason) {
-    if(this._state) return;
-
-    this._state = REJECTED;
-    this.resolved = reason;
-
-    if(this._timer) clearTimeout(this._timer);
-    if(this._calls) this.resolve();   
-
-    return this;        
-}
-
 
 /* Helper for deferring a function/process */
 function defer(promise,proc) {
