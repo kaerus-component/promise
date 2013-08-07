@@ -15,11 +15,9 @@
 * limitations under the License.
 */
 
-"use strict"
-
 var root;
 
-try{root = global} catch(e){try {root = window} catch(e){root = this}};
+try{root = global} catch(e){try {root = window} catch(e){root = this}}
 
 var setImmediate = root.setImmediate;
 
@@ -68,78 +66,64 @@ function Promise(resolver) {
     }    
 }
 
-Resolver.call(Promise.prototype);
+function Resolver(){}       
 
-function Resolver(){
-    var promised = this;
+Promise.prototype.resolve = function() {
+    var then, promise, res,
+        state = this.state,
+        value = this.value;
 
-    this.resolve = function() {
-        var then, promise, res,
-            state = this.state,
-            value = this.value;
+    if(!state) return;
 
-        if(!state) return;
+    while(then = this.calls.shift()) {
+        promise = then[PROMISE];
 
-        while(then = this.calls.shift()) {
-            promise = then[PROMISE];
+        if(typeof then[state] === 'function') {
+            try {
+                value = then[state].call(promise,this.value);  
+            } catch(error) {
+                if(promise.catch) promise.catch(error,this.value);
+                else promise.reject(error); 
 
-            if((res = then[state]) != null) {
-                if(typeof res === 'function') {
-                    try {
-                        value = res.call(promise,this.value);  
-                    } catch(error) {
-                        if(promise.catch) promise.catch(error,this.value);
-                        else promise.reject(error); 
+            }  
 
-                        continue;   
-                    }  
-
-                    if(value instanceof Promise || (value && typeof value.then === 'function') )  {
-                        /* assume value is thenable */
-                        value.then(function(v){
-                            promise.fulfill(v); 
-                        }, function(r){
-                            promise.reject(r);
-                        });
-
-                        continue;
-                    } else {
-                        state = FULFILLED;
-                    }  
-                } 
-            } 
-
-            promise.state = state;
-            promise.value = value;
-            promise.resolve();
+            if(value instanceof Promise || (value && typeof value.then === 'function') )  {
+                /* assume value is thenable */
+                value.then(function(v){
+                    promise.fulfill(v); 
+                }, function(r){
+                    promise.reject(r);
+                });
+            } else promise.fulfill(value);   
+        } else {
+            if(state === FULFILLED)
+                promise.fulfill(value);
+            else 
+                promise.reject(value);
         }
     }
+}
 
-    this.fulfill = function(value) {
-        if(this.state) return;
- 
-        if(arguments.length > 1)
-            value = [].slice.call(arguments);
+Promise.prototype.fulfill = function(value) {
+    if(this.state) return;
 
-        this.state = FULFILLED;
-        this.value = value;
+    if(arguments.length > 1)
+        value = [].slice.call(arguments);
 
-        this.resolve();
-    }
+    this.state = FULFILLED;
+    this.value = value;
 
-    this.reject = function(reason) {
-        if(this.state) return;
+    this.resolve();
+}
 
-        this.state = REJECTED;
-        this.value = reason;
+Promise.prototype.reject = function(reason) {
+    if(this.state) return;
 
-        this.resolve();
-    }
+    this.state = REJECTED;
+    this.value = reason;
 
-    if(arguments.length) {
-        this.fulfill.apply(this,arguments);
-    }   
-}       
+    this.resolve();
+}
 
 Promise.prototype.then = function(onFulfill,onReject) {
     var self = this, promise = new Promise();
@@ -229,7 +213,10 @@ Promise.prototype.when = function(task) {
 /* Attaches a handle (typically) to the promiser.   */
 /* In an Ajax scenario this could be the xhr object */ 
 Promise.prototype.attach = function(handle) {
-    this.attached = handle;
+    Object.defineProperty(this,'attached',{
+        enumerable:false,
+        value: handle
+    });
 
     return this;
 }
