@@ -14,6 +14,9 @@
   "contributors": [
     "anders elo <anders@kaerus.com>"
   ],
+  "dependencies": {
+    "uP": "git://github.com/kaerus-component/uP.git"
+  },
   "devDependencies": {
     "mocha":"*",
     "should":"*",
