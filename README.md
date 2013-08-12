@@ -7,14 +7,14 @@ Promise.js
 ==========
 Providing A+ compliant promises with some extras. Based on [microPromise (uP)](https://github.com/kaerus-component/uP)
 
-- [Promise.async()](#promiseasync)
-- [Promise.async2()](#promiseasync2)
-- [Promise.join()](#promisejoinpromisesarray)
-- [Promise.wrap()](#promisewrapprotoobject)
-- [Promise.spread()](#promisespreadonfulfillfunctiononrejectfunction)
-- [Promise.timeout()](#promisetimeouttimenumbercallbackfunction)
-- [Promise.attach()](#promiseattachhandleobject)
-- [Promise.abort()](#promiseabortmessageobject)
+  - [Promise.async()](#promiseasync)
+  - [Promise.async2()](#promiseasync2)
+  - [Promise.join()](#promisejoinpromisesarray)
+  - [Promise.wrap()](#promisewrapprotoobject)
+  - [Promise.spread()](#promisespreadonfulfillfunctiononrejectfunction)
+  - [Promise.timeout()](#promisetimeouttimenumbercallbackfunction)
+  - [Promise.attach()](#promiseattachhandleobject)
+  - [Promise.abort()](#promiseabortmessageobject)
 
 ## Promise.async()
 
@@ -63,8 +63,8 @@ Providing A+ compliant promises with some extras. Based on [microPromise (uP)](h
    },function(err){
        console.log('error=',e);
    });
-   b.fulfill('hello');
-   a.fulfill('world'); // => 'a=hello, b=world' 
+   b.fulfill('world');
+   a.fulfill('hello'); // => 'a=hello, b=world' 
    p.resolved; // => ['hello','world']
 ```
 
@@ -86,9 +86,9 @@ Providing A+ compliant promises with some extras. Based on [microPromise (uP)](h
   
   Example: Fulfillment array elements as arguments
 ```js
-   var p = uP();
+   var p = Promise();
    p.fulfill([1,2,3]).spread(function(a,b,c){
-       console.log(a,b,c); // => 123
+       console.log(a,b,c); // => '1 2 3'
    });
 ```
 
@@ -96,14 +96,94 @@ Providing A+ compliant promises with some extras. Based on [microPromise (uP)](h
 
   Timeout a pending promise and invoke callback function on timeout.
   Without a callback it throws a RangeError('exceeded timeout').
+  
+  Example: timeout & abort()
+```js
+   var p = Promise();
+   p.attach({abort:function(msg){console.log('Aborted:',msg)}});
+   p.timeout(5000);
+   // ... after 5 secs ... => Aborted: |RangeError: 'exceeded timeout']
+```
+
+  Example: cancel timeout
+```js
+   p.timeout(5000);
+   p.timeout(null); // timeout cancelled
+```
 
 ## Promise.attach(handle:Object)
 
   Attaches a `handle`. In an Ajax scenario this could be the xhr object
+  
+  Example: 
+```js
+   p = Promise();
+   p.attach({x:2});
+   p.fulfill(8).then(function(v){
+       return v*this.attached.x;
+   }).then(function(v){
+       console.log("v=",v);    // => 'v=16'
+   });
+```
 
 ## Promise.abort(message:Object)
 
-  Aborts pending request by attemtping to call `attached.abort()` and then rejecting promise.
+  Aborts pending request by calling `attached.abort()` and then rejects promise. 
+  
+  Example: Ajax wrapper using attached(), abort() & timeout().
+```js
+    function Ajax(options,data) {
+        var res = Promise(),
+            req = new XMLHttpRequest;
+        options = options ? options : {};
+        data = data ? data : null;
+        if(typeof options !== 'object') options = {url:options};
+        if(!options.method) options.method = "get";
+        if(!options.headers) options.headers = {};
+        if(!options.timeout) options.timeout = 5000;   // => set requst timeout
+        if(!options.headers.accept) options.headers.accept = "application/json";
+        res.attach(req);   // => attach request instance
+        function handle(req,res){       
+            var msg = req.responseText,
+                hdr = parseHeaders(req.getAllResponseHeaders());
+            if(options.headers.accept.indexOf('json') >= 0) 
+                msg = JSON.parse(msg);
+            if(req.status < 400) res.fulfill(msg,hdr);
+            else res.reject(msg);  
+        }
+        function parseHeaders(h) {
+            var ret = {}, key, val, i;
+            h.split('\n').forEach(function(header) {
+                if((i=header.indexOf(':')) > 0) {
+                    key = header.slice(0,i).replace(/^[\s]+|[\s]+$/g,'').toLowerCase();
+                    val = header.slice(i+1,header.length).replace(/^[\s]+|[\s]+$/g,'');
+                    if(key && key.length) ret[key] = val;
+                }   
+            });
+            return ret;
+        }
+        req.onreadystatechange = function() {
+            if(req.readyState === 4 && req.status) {
+                // cancel response timer
+                res.timeout(null); 
+                handle(req,res);   
+            }
+        }
+        // send an asynchronous XmlHttp request 
+        req.open(options.method,options.url,true);
+        // set request headers 
+        Object.keys(options.headers).forEach(function(header) {
+            req.setRequestHeader(header,options.headers[header]);
+        });
+        // send request 
+        req.send(data);
+        // set a timeout
+        // note: on timeout the attached req.abort() will be called
+        res.timeout(options.timeout);
+        return res;
+    }
+```
+
 
 
 License
