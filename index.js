@@ -1,10 +1,9 @@
+var uP = require('uP');
 
-var G, uP = require('uP');
-
-try { G = global } catch(e) { try { G = window } catch(e) { G = this } }
-
-(function(){
+(function(root){
     "use strict";
+
+    try { root = global } catch(e) { try { root = window } catch(e) {} }
 
     function isPromise(f) {
         return f && typeof f.then === 'function';
@@ -307,5 +306,5 @@ try { G = global } catch(e) { try { G = window } catch(e) { G = this } }
 
     if(module && module.exports) module.exports = Promise;
     else if(typeof define ==='function' && define.amd) define(Promise); 
-    else G.Promise = Promise; 
-})();
+    else root.Promise = Promise; 
+}(this));

@@ -1,26 +1,27 @@
-var Promise = require('../index');
+var Promise = require('..');
 
-exports.fulfilled = function(value) {
-	var promise = new Promise();
-  	promise.fulfill(value);
-  	return promise;
+exports.resolved = function(value) {
+  var promise = Promise();
+    promise.fulfill(value);
+    return promise;
 },
 
 exports.rejected = function(reason) {
-	var promise = new Promise();
-	promise.reject(reason);
-	return promise;
-},
+  var promise = Promise();
+  promise.reject(reason);
+  return promise;
+}
 
-exports.pending = function() {
-  var promise = new Promise;
+exports.deferred = function(){
+  var promise = Promise();
+  
   return {
-  	promise: promise,
-  	fulfill: function(value) {
-  		promise.fulfill(value);
-  	},
-  	reject: function(error){
-		promise.reject(error);
-  	}
+    promise: promise,
+    resolve: function(value) {
+      promise.fulfill(value);
+    },
+    reject: function(error){
+      promise.reject(error);
+    }
   }
 }
