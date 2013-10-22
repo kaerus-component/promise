@@ -3,13 +3,14 @@ var uP = require('uP');
 (function(root){
     "use strict";
 
-    try { root = global } catch(e) { try { root = window } catch(e) {} }
+    function Promise(obj){
+        if(!(this instanceof Promise))
+            return new Promise(obj);
 
-    function isPromise(f) {
-        return f && typeof f.then === 'function';
-    }
+        for(var key in obj){
+            this[key] = obj[key];
+        }
 
-    function Promise(){
         return uP(this);
     }
 
@@ -31,10 +32,8 @@ var uP = require('uP');
      * @api public
      */
     Promise.prototype.async = function(){
-        var self = this,
-            args = Array.prototype.slice.call(arguments),
-            proc = args.shift(),
-            ret;
+        var args = Array.prototype.slice.call(arguments),
+            proc = args.shift();
 
         this.defer(function(){
             proc.apply(null,args);
@@ -95,6 +94,10 @@ var uP = require('uP');
             self = this, 
             chain = uP().fulfill();
 
+        if( arguments.length > 1) {
+            promises = Array.prototype.slice.call(arguments);
+        }
+
         if(!Array.isArray(promises)) promises = [promises];
 
         function collect(i){
@@ -128,23 +131,23 @@ var uP = require('uP');
      * @api public
      */
     Promise.prototype.wrap = function(proto){
-        var self = this;
+        var promise = this;
 
         return function(){
             var args = Array.prototype.slice.call(arguments), ret;
 
-            if(isPromise(proto)){
-                proto.fulfill(args).then(self.fulfill,self.reject);
+            if(proto instanceof Promise){
+                proto.fulfill(args).then(promise.fulfill,promise.reject);
             } else if(typeof proto === 'function'){
                 try{
-                    ret = proto.apply(null,args);
-                    self.fulfill(ret);
+                    ret = proto.apply(promise,args);
+                    if(promise.isPending) promise.fulfill(ret);
                 } catch(err) {
-                    self.reject(err);
+                    promise.reject(err);
                 }
             }
                 
-            return self;
+            return promise;
         }              
     };
 
@@ -162,13 +165,13 @@ var uP = require('uP');
      * @return {Object} promise for chaining
      * @api public
      */
-    Promise.prototype.spread = function(f,r){    
+    Promise.prototype.spread = function(f,r,n){  
         function s(v){
             if(!Array.isArray(v)) v = [v];
-            return f.apply(this,v); 
+            return f.apply(f,v); 
         }
 
-        return this.then(s,r);
+        return this.then(s,r,n);
     };
 
     /**
@@ -191,118 +194,27 @@ var uP = require('uP');
      * @return {Object} promise
      * @api public
      */
-    Promise.prototype.timeout = function(t,f){
-        var self = this;
+    Promise.prototype.timeout = function(t,ontimeout){
+        var promise = this;
 
         if(t === null) {
-            clearTimeout(this.timer);
-            this.timer = null;
-        } else if(!this.timer){
-            if(typeof f !== 'function'){
-                f = function(){ 
-                    if(self.status ==='pending') 
-                        self.abort(RangeError("exceeded timeout")); 
-                }
-            }    
-            this.timer = setTimeout(f,t);
+            clearTimeout(promise.timer);
+            promise.timer = null;
+        } else if(!promise.timer){             
+            promise.timer = setTimeout(f,timeoutHandler);
         }       
 
-        return this;
-    };
-
-    /**
-     * Attaches a `handle`. In an Ajax scenario this could be the xhr object
-     *
-     * Example: 
-     *      p = Promise();
-     *      p.attach({x:2});
-     *      p.fulfill(8).then(function(v){
-     *          return v*this.attached.x;
-     *      }).then(function(v){
-     *          console.log("v=",v);    // => 'v=16'
-     *      });
-     *      
-     * @param {Object} handle
-     * @returns {Object} promise
-     * @api public
-     */
-    Promise.prototype.attach = function(handle){
-         
-        Object.defineProperty(this,'attached',{
-            enumerable:false,
-            value: handle
-        });
+        function timeoutHandler(){ 
+            if(promise.isPending) {
+                if(typeof ontimeout === 'function') ontimeout(promise);
+                else throw RangeError("exceeded timeout");
+            } 
+        }
 
         return this;
     };
 
-    /**
-     * Aborts pending request by calling `attached.abort()` and then rejects promise. 
-     *
-     * Example: Ajax wrapper using attached(), abort() & timeout().
-     *       function Ajax(options,data) {
-     *           var res = Promise(),
-     *               req = new XMLHttpRequest;
-     *           options = options ? options : {};
-     *           data = data ? data : null;
-     *           if(typeof options !== 'object') options = {url:options};
-     *           if(!options.method) options.method = "get";
-     *           if(!options.headers) options.headers = {};
-     *           if(!options.timeout) options.timeout = 5000;   // => set requst timeout
-     *           if(!options.headers.accept) options.headers.accept = "application/json";
-     *           res.attach(req);   // => attach request instance
-     *           function handle(req,res){       
-     *               var msg = req.responseText,
-     *                   hdr = parseHeaders(req.getAllResponseHeaders());
-     *               if(options.headers.accept.indexOf('json') >= 0) 
-     *                   msg = JSON.parse(msg);
-     *               if(req.status < 400) res.fulfill(msg,hdr);
-     *               else res.reject(msg);  
-     *           }
-     *           function parseHeaders(h) {
-     *               var ret = {}, key, val, i;
-     *               h.split('\n').forEach(function(header) {
-     *                   if((i=header.indexOf(':')) > 0) {
-     *                       key = header.slice(0,i).replace(/^[\s]+|[\s]+$/g,'').toLowerCase();
-     *                       val = header.slice(i+1,header.length).replace(/^[\s]+|[\s]+$/g,'');
-     *                       if(key && key.length) ret[key] = val;
-     *                   }   
-     *               });
-     *               return ret;
-     *           }
-     *           req.onreadystatechange = function() {
-     *               if(req.readyState === 4 && req.status) {
-     *                   // cancel response timer
-     *                   res.timeout(null); 
-     *                   handle(req,res);   
-     *               }
-     *           }
-     *           // send an asynchronous XmlHttp request 
-     *           req.open(options.method,options.url,true);
-     *           // set request headers 
-     *           Object.keys(options.headers).forEach(function(header) {
-     *               req.setRequestHeader(header,options.headers[header]);
-     *           });
-     *           // send request 
-     *           req.send(data);
-     *           // set a timeout
-     *           // note: on timeout the attached req.abort() will be called
-     *           res.timeout(options.timeout);
-     *           return res;
-     *       }
-     *      
-     * @param {Object} message
-     * @returns {Object} promise
-     * @api public
-     */
-    Promise.prototype.abort = function(message){
-        if(this.attached && typeof this.attached.abort === 'function')
-            this.attached.abort(message);
-
-        this.reject(message);
-
-        return this;
-    };
+    try { root = global } catch(e) { try { root = window } catch(e) {} }
 
     if(module && module.exports) module.exports = Promise;
     else if(typeof define ==='function' && define.amd) define(Promise); 
