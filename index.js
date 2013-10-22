@@ -91,7 +91,7 @@ var uP = require('uP');
      */
     Promise.prototype.join = function(promises){
         var val = [], 
-            self = this, 
+            promise = this, 
             chain = uP().fulfill();
 
         if( arguments.length > 1) {
@@ -112,7 +112,7 @@ var uP = require('uP');
             chain = chain.then(collect(i));
         }
 
-        chain.then(function(){self.fulfill(val)},function(e){self.reject(e)});
+        chain.then(function(){promise.fulfill(val)},function(e){promise.reject(e)});
 
         return this;
     };
