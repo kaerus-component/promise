@@ -201,7 +201,7 @@ var uP = require('uP');
             clearTimeout(promise.timer);
             promise.timer = null;
         } else if(!promise.timer){             
-            promise.timer = setTimeout(f,timeoutHandler);
+            promise.timer = setTimeout(t,timeoutHandler);
         }       
 
         function timeoutHandler(){ 
